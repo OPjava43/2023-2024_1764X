@@ -16,15 +16,17 @@ brain=Brain()
 controller_1 = Controller(PRIMARY)
 # B = back M = middle F = Front
 #L = Left R =Right
-b_l = Motor(Ports.PORT18, GearSetting.RATIO_18_1, False)
-m_l = Motor(Ports.PORT19, GearSetting.RATIO_18_1, False)
-f_l = Motor(Ports.PORT20, GearSetting.RATIO_18_1, False)
-spinner = Motor(Ports.PORT5, GearSetting.RATIO_6_1, False)
-b_r = Motor(Ports.PORT8, GearSetting.RATIO_18_1, False)
-m_r = Motor(Ports.PORT9, GearSetting.RATIO_18_1, False)
-f_r = Motor(Ports.PORT10, GearSetting.RATIO_18_1, False)
+b_l = Motor(Ports.PORT19, GearSetting.RATIO_18_1, True)
+m_l = Motor(Ports.PORT18, GearSetting.RATIO_18_1, True)
+f_l = Motor(Ports.PORT17, GearSetting.RATIO_18_1, True)
+spinner = Motor(Ports.PORT12, GearSetting.RATIO_6_1, True)
+b_r = Motor(Ports.PORT9, GearSetting.RATIO_18_1, False)
+m_r = Motor(Ports.PORT8, GearSetting.RATIO_18_1, False)
+f_r = Motor(Ports.PORT7, GearSetting.RATIO_18_1, False)
+lifter = Motor(Ports.PORT2, GearSetting.RATIO_36_1, False)
 l_wall = DigitalOut(brain.three_wire_port.a)
 r_wall = DigitalOut(brain.three_wire_port.b)
+bumperswitch = Bumper(brain.three_wire_port.h)
 
 brain.screen.print("Hello V5")
 
@@ -46,19 +48,96 @@ spinning = False
 
 selected = False
 
+spin_mod = "Off"
+
+height = 0
+
+#////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#///menu///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+def menu():
+    controller_1.screen.clear_line(1)
+    controller_1.screen.set_cursor(1,1)
+    controller_1.screen.print(autons[auton] + "  " + spin_mod)
 #////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #///other func/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-def spin():
 
+
+
+def spin():
     global spinning
+    global spin_mod
     if spinning:
         spinning = False
         spinner.stop()
+        spin_mod = "Off"
     else:
         spinning = True
-        spinner.set_velocity(100, PERCENT)
         spinner.spin(FORWARD)
+
+
+
+def hightenator():
+    global height
+    global spin_mod
+    
+    if height == 0:
+        spinner.set_velocity(-50, PERCENT)
+        spinner.spin(FORWARD)
+        spin_mod = "Push Over"
+        # lift down untill bumper, spin wheel
+        lifter.spin(REVERSE)
+        if bumperswitch.pressed:
+            # set inter
+            lifter.position(0)
+            lifter.set_stopping(COAST)
+            lifter.stop()
+
+    if height == 1:
+        spinner.set_velocity(50, PERCENT)
+        spinner.spin(FORWARD)
+        lifter.set_stopping(HOLD)
+        spin_mod = "Intake"
+        # lift to x degrees, spin wheel, when pressed go to x pos r1
+        if controller_1.buttonR1.pressing:
+            if lifter.position(DEGREES) < 275:
+                lifter.spin(FORWARD)
+            else:
+                lifter.stop()
+        else:
+            lifter.spin_to_position(250)
+
+    if height == 2:
+        lifter.set_stopping(HOLD)
+        forwarder = 0
+        # find real mesurement
+        lifter.spin_to_position(500)
+        if controller_1.buttonR1.pressed:
+            forwarder += 1
+        if forwarder % 2 == 0:
+            spinner.set_velocity(100, PERCENT)
+            spin_mod = "Shooting"
+        else:
+            spinner.set_velocity(-100, PERCENT)
+            spin_mod = "Shooting_rev"
+        # lift to x degrees, spin wheel 100 percent, change directions with r1
+
+
+
+def lift_up():
+    global height
+    if height < 2:
+        height += 1
+
+def lift_down():
+    global height
+    if height > 0:
+        height -= 1
+
+    
+    
+
 
 
 
@@ -122,8 +201,9 @@ def drivetrain():
       #if the position is 3 both should have a posiitve speed
       # if the 3 is positivie but the 1 is negative we should be turning left
       # basically whichever direction we want to go in, the velocity of that side is turned down
-    RightVel = (controller_1.axis3.position() - controller_1.axis1.position());
-    LeftVel = (controller_1.axis3.position() + controller_1.axis1.position());
+    RightVel = (controller_1.axis3.position() - controller_1.axis1.position())
+    LeftVel = (controller_1.axis3.position() + controller_1.axis1.position())
+    speed = .75
     #prevents the motor from trying to go to fast
     if RightVel > 100:
         RightVel = 100
@@ -136,6 +216,8 @@ def drivetrain():
     
     if LeftVel < -100:
         LeftVel = -100
+
+    LeftVel= LeftVel*speed
     
 
     #sets the velocity and goes forward
@@ -178,13 +260,6 @@ def Skills():
 def Test():
     pass
 
-
-        
-def menu():
-    controller_1.screen.clear_line(1)
-    controller_1.screen.set_cursor(1,1)
-    controller_1.screen.print(autons[auton])
-
 def up() :
     global auton
     global selected
@@ -192,7 +267,6 @@ def up() :
         auton += 1
         if auton > len(autons):
             auton = 1
-        menu()
 
 def down():
     global auton
@@ -201,7 +275,6 @@ def down():
         auton -= 1
         if auton < 1:
             auton = len(autons)
-        menu()
 
 def select():
     global selected
@@ -212,6 +285,8 @@ def autonomous():
     spinner.set_stopping(COAST)
     brain.screen.clear_screen()
     while True:
+        menu()
+        hightenator()
         if autons[auton] == "Offense":
             Offense()
 
@@ -232,12 +307,11 @@ def autonomous():
 
 def usercontrol():
     spinner.set_stopping(COAST)
-    count = 0
     brain.screen.clear_screen()
     while True:
-        brain.screen.print_at("driver... %6d" %(count), x=10, y=40)
-        count = count + 1
-        wait(20, MSEC)
+        hightenator()
+        menu()
+        drivetrain()
 
 
 menu()
@@ -246,4 +320,6 @@ controller_1.buttonUp.pressed(up)
 controller_1.buttonDown.pressed(down)
 controller_1.buttonR2.pressed(spin)
 controller_1.buttonA.pressed(select)
+controller_1.buttonL1.pressed(lift_up)
+controller_1.buttonL2.pressed(lift_down)
 comp = Competition(usercontrol, autonomous)
