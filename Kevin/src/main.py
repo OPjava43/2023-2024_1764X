@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------------------- #
 #                                                                              #
-# 	Module:       main.py                                                      #
-# 	Author:       student                                                      #
-# 	Created:      1/4/2024, 3:53:42 PM                                         #
-# 	Description:  V5 project                                                   #
+#   Module:       main.py                                                      #
+#   Author:       student                                                      #
+#   Created:      1/4/2024, 3:53:42 PM                                         #
+#   Description:  V5 project                                                   #
 #                                                                              #
 # ---------------------------------------------------------------------------- #
 
@@ -24,11 +24,11 @@ b_r = Motor(Ports.PORT9, GearSetting.RATIO_18_1, False)
 m_r = Motor(Ports.PORT8, GearSetting.RATIO_18_1, False)
 f_r = Motor(Ports.PORT7, GearSetting.RATIO_18_1, False)
 lifter = Motor(Ports.PORT2, GearSetting.RATIO_36_1, False)
-l_wall = DigitalOut(brain.three_wire_port.a)
-r_wall = DigitalOut(brain.three_wire_port.b)
+da_walls = Pneumatics(brain.three_wire_port.a)
 bumperswitch = Bumper(brain.three_wire_port.h)
-
+bumperswitchtwo = Bumper(brain.three_wire_port.b)
 brain.screen.print("Hello V5")
+pnumatic_switcher = False
 
 #////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #//VARIABLES/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -50,8 +50,9 @@ selected = False
 
 spin_mod = "Off"
 
-height = 0
+height = 3
 
+forwarder = 0
 #////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #///menu///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -65,61 +66,56 @@ def menu():
 
 
 
-def spin():
-    global spinning
-    global spin_mod
-    if spinning:
-        spinning = False
-        spinner.stop()
-        spin_mod = "Off"
-    else:
-        spinning = True
-        spinner.spin(FORWARD)
-
-
 
 def hightenator():
     global height
     global spin_mod
-    
+    global forwarder
     if height == 0:
         spinner.set_velocity(-50, PERCENT)
         spinner.spin(FORWARD)
         spin_mod = "Push Over"
         # lift down untill bumper, spin wheel
+        lifter.reset_position()
         lifter.spin(REVERSE)
-        if bumperswitch.pressed:
+        if bumperswitch.pressed or bumperswitchtwo.pressed:
             # set inter
-            lifter.position(0)
             lifter.set_stopping(COAST)
             lifter.stop()
-
+    
     if height == 1:
         spinner.set_velocity(50, PERCENT)
         spinner.spin(FORWARD)
         lifter.set_stopping(HOLD)
         spin_mod = "Intake"
         # lift to x degrees, spin wheel, when pressed go to x pos r1
-        if controller_1.buttonR1.pressing:
-            if lifter.position(DEGREES) < 275:
-                lifter.spin(FORWARD)
-            else:
-                lifter.stop()
-        else:
-            lifter.spin_to_position(250)
-
+        lifter.spin_to_position(150)
+        lifter.stop()
+    
     if height == 2:
         lifter.set_stopping(HOLD)
-        forwarder = 0
+        spinner.set_velocity(50, PERCENT)
+        spinner.spin(FORWARD)
+        lifter.spin_to_position(230)
+        lifter.stop()
+    """
+    if height == 1:
+        lifter.set_stopping(HOLD)
+        lifter.spin_to_position(80, DEGREES, 100, PERCENT, False)
+
+    """
+    if height == 3:
+        lifter.set_stopping(HOLD)
         # find real mesurement
-        lifter.spin_to_position(500)
-        if controller_1.buttonR1.pressed:
-            forwarder += 1
+        lifter.spin_to_position(500, DEGREES, 100, PERCENT, False)
+        brain.screen.print(forwarder)
         if forwarder % 2 == 0:
-            spinner.set_velocity(100, PERCENT)
+            spinner.set_velocity(-100, PERCENT)
+            spinner.spin(FORWARD)
             spin_mod = "Shooting"
         else:
-            spinner.set_velocity(-100, PERCENT)
+            spinner.set_velocity(100, PERCENT)
+            spinner.spin(FORWARD)
             spin_mod = "Shooting_rev"
         # lift to x degrees, spin wheel 100 percent, change directions with r1
 
@@ -127,19 +123,37 @@ def hightenator():
 
 def lift_up():
     global height
-    if height < 2:
+    if height < 3:
         height += 1
+    if height > 3:
+        height -= 1
 
 def lift_down():
     global height
     if height > 0:
         height -= 1
+    if height < 0:
+        height += 1
 
+
+def forwarding():
+    global forwarder
+    forwarder += 1
+
+def walls_open():
+
+    da_walls.open()
+
+def walls_close():
     
-    
+    da_walls.close()
 
 
+def gleb_gleb():
 
+    global height
+
+    height = 0
 
 #////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #///skills func/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -177,14 +191,14 @@ def rotate(direction, degrees, wait_at_end = True, speed = 100):
     #left
     # num_turns is a constant for the rotation of the bot 11 * 2 * pi / (3.25 * pip) / 360
     num_turns = degrees*0.0188;
-    if direction == "right":    
+    if direction == "left":    
         f_l.spin_for(FORWARD, num_turns, TURNS, False)
         m_l.spin_for(FORWARD, num_turns, TURNS, False)
         b_l.spin_for(FORWARD, num_turns, TURNS, wait_at_end)
 
 
     #turns right
-    if direction == "left":
+    if direction == "right":
         f_r.spin_for(FORWARD, num_turns, TURNS, False)
         m_r.spin_for(FORWARD, num_turns, TURNS, False)
         b_r.spin_for(FORWARD, num_turns, TURNS, wait_at_end)
@@ -203,7 +217,7 @@ def drivetrain():
       # basically whichever direction we want to go in, the velocity of that side is turned down
     RightVel = (controller_1.axis3.position() - controller_1.axis1.position())
     LeftVel = (controller_1.axis3.position() + controller_1.axis1.position())
-    speed = .75
+    speed = 1
     #prevents the motor from trying to go to fast
     if RightVel > 100:
         RightVel = 100
@@ -218,7 +232,7 @@ def drivetrain():
         LeftVel = -100
 
     LeftVel= LeftVel*speed
-    
+    RightVel = RightVel*speed
 
     #sets the velocity and goes forward
     f_l.set_velocity(LeftVel, PERCENT)
@@ -243,7 +257,9 @@ def drivetrain():
 
 
 def Offense():
-    pass
+    Move(35, wait_at_end = True, speed = 70)
+    rotate("left", -70, wait_at_end = True, speed = 50)
+    wait(100, SECONDS)
 
 def Defense():
     pass
@@ -255,10 +271,18 @@ def High_Defense():
     pass
 
 def Skills():
-    pass
+    Move(35, wait_at_end = True, speed = 50)
+    rotate("left", -70, wait_at_end = True, speed = 50)
+    lifter.spin_to_position(230)
+    spinner.spin(FORWARD)
+    Move(10, wait_at_end = True, speed = 50)
+    da_walls.open()
+    wait(30, SECONDS)
+    da_walls.close()
 
 def Test():
     pass
+
 
 def up() :
     global auton
@@ -281,12 +305,41 @@ def select():
     controller_1.rumble("-.-.")
     selected = True
 
+
+
 def autonomous():
-    spinner.set_stopping(COAST)
+    # skills auto, quote out if coding for matches
+    Move(35, wait_at_end = True, speed = 70)
+    rotate("left", -70, wait_at_end = False, speed = 50)
+    lifter.spin_to_position(500)
+    Move(10, wait_at_end = False, speed = 100)
+    da_walls.open()
+    spinner.set_velocity(-100, PERCENT)
+    spinner.spin_for(FORWARD, 60, SECONDS)
+    lifter.set_stopping(COAST)
+    lifter.spin_to_position(100, wait = False)
+    da_walls.close()
+    rotate("right", -120, wait_at_end = True)
+    Move(60, wait_at_end = True, speed = 100)
+    rotate("right", -120, wait_at_end = True)
+    Move(40, wait_at_end = True, speed = 100)
+    Move(-10, wait_at_end = True, speed = 100)
+    Move(10, wait_at_end = True, speed = 100)
+    Move(-10, wait_at_end = True, speed = 100)
+    lifter.spin_to_position(150, wait = False)
+    da_walls.open()
+    spinner.stop()
+    Move(100, wait_at_end = True, speed = 100)
+    da_walls.close()
+    Move(-30, wait_at_end = True, speed = 100)
     brain.screen.clear_screen()
+
+    wait(10000, SECONDS)
+    
+
+
     while True:
         menu()
-        hightenator()
         if autons[auton] == "Offense":
             Offense()
 
@@ -305,21 +358,37 @@ def autonomous():
         if autons[auton] == "Test":
             Test()
 
-def usercontrol():
-    spinner.set_stopping(COAST)
-    brain.screen.clear_screen()
-    while True:
-        hightenator()
-        menu()
-        drivetrain()
 
 
 menu()
 
 controller_1.buttonUp.pressed(up)
 controller_1.buttonDown.pressed(down)
-controller_1.buttonR2.pressed(spin)
 controller_1.buttonA.pressed(select)
+
+
+def usercontrol():
+    
+    Move(35, wait_at_end = True, speed = 70)
+    rotate("left", -60, wait_at_end = False, speed = 50)
+    lifter.spin_to_position(500)
+    Move(6, wait_at_end = True, speed = 100)
+    da_walls.open()
+    spinner.set_velocity(-100, PERCENT)
+    spinner.spin_for(FORWARD, 25, SECONDS)
+    
+    while True:
+        hightenator()
+        menu()
+        drivetrain()
+
+comp = Competition(usercontrol, autonomous)
+
+controller_1.buttonR1.pressed(forwarding)
 controller_1.buttonL1.pressed(lift_up)
 controller_1.buttonL2.pressed(lift_down)
-comp = Competition(usercontrol, autonomous)
+controller_1.buttonR2.pressed(walls_open)
+controller_1.buttonA.pressed(walls_close)
+controller_1.buttonLeft.pressed(gleb_gleb)
+
+#penis#penis#penis#penis#penis#penis#penis#penis#penis#penis#penis#penis#penis#penis#penis#penis#penis#penis#penis#penis
